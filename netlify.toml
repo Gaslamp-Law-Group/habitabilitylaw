@@ -1,0 +1,6 @@
+[build]
+  command = "node build.mjs"
+  publish = "dist"
+
+# Netlify serves /mold from mold.html automatically (pretty URLs).
+# Add habitabilitylawyers.com as a domain alias in Netlify; it redirects to the primary domain.
