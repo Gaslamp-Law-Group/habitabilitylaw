@@ -3,7 +3,7 @@
 import { mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { site, issues, copy } from './content.mjs';
+import { site, issues, landers, copy } from './content.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const preview = process.argv.includes('--preview');
@@ -24,6 +24,11 @@ const rel = (fromLang, toLang, slug) => {
   return toLang === 'es' ? 'es/' + name : '../' + name;
 };
 const canonical = (lang, slug) => site.domain + '/' + (lang === 'es' ? 'es/' : '') + (slug || '');
+
+// Hidden lead fields filled from the landing URL: UTMs plus Google (gclid, gbraid, wbraid), Microsoft and Meta click IDs.
+const TRACK_FIELDS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'gbraid', 'wbraid', 'msclkid', 'fbclid'];
+const gtmHead = site.gtmId ? `<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','${site.gtmId}');</script>` : '';
+const gtmBody = site.gtmId ? `<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=${site.gtmId}" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>` : '';
 
 function tiles(name, labels, { type = 'radio', keys, scores, checked, cls = '' } = {}) {
   return `<div class="tiles ${cls}">` + labels.map((label, i) => {
@@ -46,7 +51,7 @@ function quiz(lang, issueKey, pageName) {
   <input type="hidden" name="lang" value="${lang}">
   <input type="hidden" name="page" value="${pageName}">
   <input type="hidden" name="lead_score" value="">
-  ${['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'fbclid'].map((k) => `<input type="hidden" name="${k}" value="">`).join('')}
+  ${TRACK_FIELDS.map((k) => `<input type="hidden" name="${k}" value="" data-track>`).join('')}
   <p class="hp"><label>Leave this empty <input name="bot-field" tabindex="-1" autocomplete="off"></label></p>
   <div class="q-body">
     <div class="q-head"><span class="q-count" aria-live="polite"></span><button type="button" class="q-back" hidden>${q.back}</button></div>
@@ -77,7 +82,7 @@ function quiz(lang, issueKey, pageName) {
 <script type="application/json" id="quiz-i18n">${JSON.stringify(i18n)}</script>`;
 }
 
-function shell(lang, { slug, title, desc, body, altSlug, bar = true }) {
+function shell(lang, { slug, title, desc, body, altSlug, bar = true, lander = false, noindex = false }) {
   const c = copy[lang];
   const f = c.footer;
   return `<!DOCTYPE html>
@@ -87,20 +92,24 @@ function shell(lang, { slug, title, desc, body, altSlug, bar = true }) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title}</title>
 ${desc ? `<meta name="description" content="${desc}">` : ''}
+${noindex ? '<meta name="robots" content="noindex,follow">' : ''}
 <link rel="canonical" href="${canonical(lang, slug)}">
 <link rel="alternate" hreflang="${other(lang)}" href="${canonical(other(lang), altSlug)}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&display=swap" rel="stylesheet">
-<!-- TRACKING: add Google Tag Manager here once the container ID exists. The quiz pushes quiz_start, quiz_step and lead_submit to dataLayer. -->
+<!-- TRACKING: set site.gtmId in content.mjs to load Google Tag Manager. The page pushes quiz_start, quiz_step, lead_submit and phone_click to dataLayer. -->
+<script>window.dataLayer=window.dataLayer||[];window.dataLayer.push({page_lang:'${lang}',page_name:'${slug || 'home'}'});</script>
+${gtmHead}
 <style>${css}</style>
 </head>
 <body>
+${gtmBody}
 <header class="top"><div class="wrap">
-  <a class="brand" href="${rel(lang, lang, '')}">Habitability Law<small>${c.brandSub}</small></a>
+  ${lander ? `<span class="brand">Habitability Law<small>${c.brandSub}</small></span>` : `<a class="brand" href="${rel(lang, lang, '')}">Habitability Law<small>${c.brandSub}</small></a>`}
   <div class="top-actions">
     <a class="lang" href="${rel(lang, other(lang), altSlug)}" lang="${other(lang)}">${c.otherLang}</a>
-    <a class="phone" href="tel:${site.phoneTel}"><span>${c.callLabel}</span>${site.phoneDisplay}</a>
+    <a class="phone" href="tel:${site.phoneTel}" data-loc="header"><span>${c.callLabel}</span>${site.phoneDisplay}</a>
   </div>
 </div></header>
 <main>${body}</main>
@@ -110,7 +119,7 @@ ${desc ? `<meta name="description" content="${desc}">` : ''}
   <p>${f.legal}</p>
   <p><a href="${rel(lang, lang, c.privacy.slug)}">${f.privacy}</a></p>
 </div></footer>
-${bar ? `<div class="bar"><a class="btn ghost" href="tel:${site.phoneTel}">${c.callLabel}</a><a class="btn" href="#quiz">${c.cta}</a></div>` : ''}
+${bar ? `<div class="bar"><a class="btn ghost" href="tel:${site.phoneTel}" data-loc="bar">${c.callLabel}</a><a class="btn" href="#quiz">${c.cta}</a></div>` : ''}
 <script>${js}</script>
 </body>
 </html>`;
@@ -137,15 +146,16 @@ function sharedSections(lang) {
 </div></section>
 <section class="close"><div class="wrap">
   <h2>${c.closeTitle}</h2>
-  <div class="row"><a class="btn dark" href="#quiz">${c.cta}</a><span class="tel">${c.orCall} <a href="tel:${site.phoneTel}">${site.phoneDisplay}</a></span></div>
+  <div class="row"><a class="btn dark" href="#quiz">${c.cta}</a><span class="tel">${c.orCall} <a href="tel:${site.phoneTel}" data-loc="close">${site.phoneDisplay}</a></span></div>
 </div></section>`;
 }
 
-function hero(lang, h1, sub, issueKey, pageName) {
+function hero(lang, h1, sub, issueKey, pageName, kicker) {
   const c = copy[lang];
   return `
 <section class="hero"><div class="wrap">
   <div>
+    ${kicker ? `<p class="kicker">${kicker}</p>` : ''}
     <h1>${h1}</h1>
     <p class="hero-sub">${sub}</p>
     <ul class="proof">${c.proof.map((p) => `<li>${p}</li>`).join('')}</ul>
@@ -174,11 +184,12 @@ for (const lang of ['en', 'es']) {
   }));
 
   // ad landing pages: no links out except language, phone and privacy
-  for (const it of issues) {
+  for (const it of [...issues, ...landers]) {
     const p = c.pages[it.key];
+    const preselect = issues.includes(it) ? it.key : null;
     write(file(lang, it.slug[lang]), shell(lang, {
-      slug: it.slug[lang], altSlug: it.slug[other(lang)], title: p.title, desc: p.sub,
-      body: hero(lang, p.h1, p.sub, it.key, it.key) + `
+      slug: it.slug[lang], altSlug: it.slug[other(lang)], title: p.title, desc: p.desc || p.sub, lander: true, noindex: !!it.noindex,
+      body: hero(lang, p.h1, p.sub, preselect, it.key, p.kicker) + `
 <section class="sec"><div class="wrap split">
   <h2>${c.signsTitle}</h2>
   <div><ul class="plain">${p.signs.map((s) => `<li>${s}</li>`).join('')}</ul><p class="law">${p.law}</p></div>
