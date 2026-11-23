@@ -4,3 +4,15 @@
 
 # Netlify serves /mold from mold.html automatically (pretty URLs).
 # Add habitabilitylawyers.com as a domain alias in Netlify; it redirects to the primary domain.
+
+[[redirects]]
+from = "https://habitabilitylawyers.com/*"
+to = "https://habitabilitylaw.com/:splat"
+status = 301
+force = true
+
+[[redirects]]
+from = "https://www.habitabilitylawyers.com/*"
+to = "https://habitabilitylaw.com/:splat"
+status = 301
+force = true
