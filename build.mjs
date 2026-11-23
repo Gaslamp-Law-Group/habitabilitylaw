@@ -70,6 +70,7 @@ function quiz(lang, issueKey, pageName) {
   <div class="q-done" hidden>
     <h3 tabindex="-1"></h3>
     <p>${fill(q.done1)}</p><p>${q.done2}</p>
+    <ul class="plain" style="margin-top:.8rem">${copy[lang].record.map(([a]) => `<li>${a}</li>`).join('')}</ul>
     ${preview ? `<p class="preview-note">${q.preview}</p>` : ''}
   </div>
 </form>
@@ -126,7 +127,11 @@ function sharedSections(lang) {
   <h2>${c.stepsTitle}</h2>
   <ol class="steps">${c.steps.map(([a, b]) => `<li><div><h3>${a}</h3><p>${b}</p></div></li>`).join('')}</ol>
 </div></section>
-<section class="sec sec-white faq"><div class="wrap split">
+<section class="sec sec-white"><div class="wrap split">
+  <div><h2>${c.recordTitle}</h2><p class="lede">${c.recordLede}</p></div>
+  <ul class="plain">${c.record.map(([a, b]) => `<li><b>${a}</b>${b}</li>`).join('')}</ul>
+</div></section>
+<section class="sec faq"><div class="wrap split">
   <h2>${c.faqTitle}</h2>
   <div>${c.faq.map(([q, a]) => `<details><summary>${q}</summary><p>${a}</p></details>`).join('')}</div>
 </div></section>
