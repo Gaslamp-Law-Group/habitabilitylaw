@@ -1,3 +1,11 @@
+// phone taps, on every page: which button was tapped, never who tapped it
+document.addEventListener('click', function (e) {
+  var a = e.target.closest && e.target.closest('a[href^="tel:"]');
+  if (!a) return;
+  window.dataLayer = window.dataLayer || [];
+  window.dataLayer.push({ event: 'phone_click', click_location: a.getAttribute('data-loc') || 'other' });
+});
+
 (function () {
   var form = document.getElementById('quiz');
   if (!form) return;
@@ -55,13 +63,22 @@
   });
 
   // carry ad click IDs and UTMs into the lead for offline conversion import
+  // A new ad click replaces the stored set; otherwise the last ad click is kept for 90 days,
+  // so a tenant who comes back later to finish the quiz is still tied to the ad that brought them.
   try {
     var qs = new URLSearchParams(location.search);
-    ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'fbclid'].forEach(function (k) {
-      var v = qs.get(k) || sessionStorage.getItem('hl_' + k) || '';
-      if (qs.get(k)) sessionStorage.setItem('hl_' + k, v);
-      if (form.elements[k]) form.elements[k].value = v;
-    });
+    var fields = [].slice.call(form.querySelectorAll('input[data-track]'));
+    var fresh = {}, any = false;
+    fields.forEach(function (el) { var v = qs.get(el.name); if (v) { fresh[el.name] = v.slice(0, 200); any = true; } });
+    var saved = {};
+    try { saved = JSON.parse(localStorage.getItem('hl_attr') || '{}'); } catch (e2) {}
+    if (any) {
+      saved = { t: Date.now(), v: fresh };
+      try { localStorage.setItem('hl_attr', JSON.stringify(saved)); } catch (e3) {}
+    } else if (!saved.t || Date.now() - saved.t > 90 * 864e5) {
+      saved = { v: {} };
+    }
+    fields.forEach(function (el) { el.value = (saved.v && saved.v[el.name]) || ''; });
   } catch (e) {}
 
   function val(name) {
@@ -83,7 +100,7 @@
     var btn = form.querySelector('[type=submit]');
     btn.disabled = true;
     var done = function () {
-      track('lead_submit', {});
+      track('lead_submit', { page: form.elements.page.value, lang: form.elements.lang.value });
       form.querySelector('.q-body').hidden = true;
       var d = form.querySelector('.q-done');
       d.querySelector('h3').textContent = t.doneTitle.replace('{name}', name.split(' ')[0]);
